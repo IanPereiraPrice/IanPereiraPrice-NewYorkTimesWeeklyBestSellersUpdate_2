@@ -45,7 +45,7 @@ def send_mail(df,email_list = []):
         msg["to"] = address
         msg["from"] = "nytweeklyupdatebooklist@gmail.com"
         msg["Subject"] = "Send email with Python"
-        msg["Body"] = df['title'].astype(str)
+        msg["Body"] = ' '.join(df['title'].tolist())
         msg.set_content(msg["Body"])
 
 
@@ -117,15 +117,17 @@ def check_table_exists(table_name, engine):
         print(f"{table_name} does not exist")
         
 @logger
-def nyt_call(table_name,api_call_name,mail_list = []):
+def nyt_call(table_name,api_call_name):
     engine = db_connection()
+    df_mail = pd.read_sql(f"SELECT * FROM {'nyt_mailing_list'}", engine)
+    mail_list = df_mail['mailing_list'].to_list()
     temp = pd.read_sql(f"SELECT * FROM {table_name}", engine)
     response = send_request('current',api_call_name)
     df = parse_response(response)
     if max(df['time'])>max(temp['time']): 
     
         df.to_sql(table_name, engine, if_exists='replace')
-        send_mail(df,["ianprice16@yahoo.com"])
+        send_mail(df,mail_list)
         
     else: 
         pass
@@ -146,8 +148,8 @@ def etl():
     fic_list = 'combined-print-and-e-book-fiction'
     fic = 'combined_print_and_e_book_fiction'
     engine=db_connection()
-    nyt_call(non_fiction,non_fic_list)
-    nyt_call(fic,fic_list)
+    nyt_call(non_fiction,non_fic_list,["chargersfan102@gmail.com","ianprice17@yahoo.com"])
+    nyt_call(fic,fic_list,["chargersfan102@gmail.com","ianprice17@yahoo.com"])
     engine.dispose
 
 with dag:

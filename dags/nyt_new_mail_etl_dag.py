@@ -59,8 +59,8 @@ def send_mail(df,email_list = []):
         msg["to"] = address
         msg["from"] = "nytweeklyupdatebooklist@gmail.com"
         msg["Subject"] = "weekly update"
-        msg["Body"] = df['title'].astype(str)
-        msg.set_content(msg["Body"])
+        text = ' '.join(df['title'].tolist()).capitalize()
+        msg.set_content(text)
 
 
         #Create Smtp client, login to gmail and send the email
@@ -89,7 +89,8 @@ def parse_response(response):
     data = {'weeks_on_list': [],  
         'description': [],
          'title':[],
-            'time':[]}
+            'time':[],
+           'rank':[]}
     
     time = response['last_modified']
     print(time)
@@ -99,7 +100,8 @@ def parse_response(response):
         print(book['weeks_on_list'])
         data['description'].append(book['book_details'][0]['description']) 
         data['title'].append(book['book_details'][0]['title'])
-        data['time']. append(time)
+        data['time'].append(time)
+        data['rank'].append(book['rank'])
         print(book['book_details'][0]['title'])
     return pd.DataFrame(data) 
    
@@ -113,14 +115,38 @@ def check_table_exists(table_name, engine):
         print(f"{table_name} does not exist in the DB!")
         
 @logger
-def nyt_call(table_name,api_call_name):
+def mail_check(email_list = []):
+    engine = db_connection()
+    mailing_list = {'mailing_list':email_list}
+    df_m = pd.DataFrame(mailing_list)
+    
+    
+    if engine.has_table('mailing_list') == False:
+        df_m.to_sql('nyt_mailing_list', engine,if_exists='replace')
+        return df_m
+    else:
+        temp = pd.read_sql(f"SELECT * FROM {'nyt_mailing_list'}", engine)
+        df2 = pd.merge(df_m, temp, on=['mailing_list'], how='left', indicator='Exist')
+        df3 = pd.merge(df2, temp, on=['mailing_list'], how='left', indicator='Exist')
+        df3['Exist'] = np.where(df.Exist == 'both', True, False)
+        df_new = df3[['Exist']==False]
+    
+    
+        if len(df_new.index) > 0:
+            df_new.to_sql('nyt_mailing_list', engine, if_exists='append')
+            return df_new
+        else: pass
+        
+        
+        
+@logger
+def nyt_call(table_name,api_call_name,email_list = []):
     engine = db_connection()
     response = send_request('current',api_call_name)
     df = parse_response(response)
-    send_mail(df,["ianprice16@yahoo.com"])
-    temp = pd.read_sql(f"SELECT * FROM {table_name}", engine)
-    df.to_sql(table_name, engine, if_exists='replace')
-       
+    if email_list is not None:
+     
+        send_mail(df,email_list)
 
 @logger
 def tables_exists():
@@ -132,13 +158,16 @@ def tables_exists():
 
 @logger
 def etl():
+    email_list = ["chargersfan102@gmail.com","ianprice17@yahoo.com"]
     non_fic_list = 'combined-print-and-e-book-nonfiction'
     non_fiction = 'combined_print_and_e_book_nonfiction'
     fic_list = 'combined-print-and-e-book-fiction'
     fic = 'combined_print_and_e_book_fiction'
     engine=db_connection()
-    nyt_call(non_fiction,non_fic_list)
-    nyt_call(fic,fic_list)
+    df_mail = mail_check(email_list)
+    mail_list = df_mail['mailing_list'].to_list()
+    nyt_call(non_fiction,non_fic_list,mail_list)
+    nyt_call(fic,fic_list,mail_list)
     engine.dispose
 
 with dag:
